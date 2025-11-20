@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lesson Preview | LessonLaunch</title>
+  <link rel="icon" type="image/svg+xml" href="public/logo.svg" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  
+  <!-- Supabase Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <style>
+    .preview-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 24px;
+    }
+
+    .slides-sidebar {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      height: calc(100vh - 100px);
+      overflow-y: auto;
+      box-shadow: 0 2px 8px rgba(26, 28, 37, 0.06);
+      position: sticky;
+      top: 20px;
+    }
+
+    .slide-thumbnail {
+      padding: 12px;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 8px;
+      transition: all 0.2s;
+      background: #f8f9fa;
+    }
+
+    .slide-thumbnail:hover {
+      background: #e9ecef;
+    }
+
+    .slide-thumbnail.active {
+      border-color: var(--accent);
+      background: rgba(76, 110, 245, 0.05);
+    }
+
+    .slide-thumbnail h4 {
+      margin: 0 0 4px 0;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+
+    .slide-thumbnail p {
+      margin: 0;
+      font-size: 0.8rem;
+      color: var(--subtext);
+    }
+
+    .editor-main {
+      background: white;
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 2px 8px rgba(26, 28, 37, 0.06);
+      min-height: calc(100vh - 100px);
+    }
+
+    .slide-editor {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .slide-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .slide-type-badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .editor-field {
+      margin-bottom: 24px;
+    }
+
+    .editor-field label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .editor-field input,
+    .editor-field textarea {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #eee;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 1rem;
+      transition: border-color 0.2s;
+    }
+
+    .editor-field input:focus,
+    .editor-field textarea:focus {
+      border-color: var(--accent);
+      outline: none;
+    }
+
+    .image-selector {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 16px;
+      margin-top: 12px;
+    }
+
+    .image-option {
+      position: relative;
+      aspect-ratio: 4/3;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 2px solid transparent;
+    }
+
+    .image-option.selected {
+      border-color: var(--accent);
+    }
+
+    .image-option img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .action-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: white;
+      padding: 16px 24px;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+      display: flex;
+      justify-content: flex-end;
+      gap: 16px;
+      z-index: 100;
+    }
+
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255,255,255,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+
+    /* Image Search Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      transform: scale(0.9);
+      transition: transform 0.3s ease;
+    }
+
+    .modal-overlay.active .modal {
+      transform: scale(1);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      color: var(--text);
+      font-size: 1.25rem;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #666;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+
+    .modal-close:hover {
+      background: #f0f0f0;
+    }
+
+    .modal-search {
+      margin-bottom: 20px;
+    }
+
+    .modal-search input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #eee;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: border-color 0.2s;
+    }
+
+    .modal-search input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .modal-search-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .modal-images-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .modal-image-item {
+      position: relative;
+      aspect-ratio: 4/3;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .modal-image-item:hover {
+      border-color: var(--accent);
+      transform: scale(1.05);
+    }
+
+    .modal-image-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .modal-loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    .modal-error {
+      text-align: center;
+      padding: 40px;
+      color: #d32f2f;
+    }
+
+    /* Tabs */
+    .modal-tabs {
+      display: flex;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 20px;
+    }
+
+    .modal-tab {
+      padding: 12px 24px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      font-weight: 500;
+      color: #666;
+      background: none;
+      border: none;
+      font-size: 1rem;
+    }
+
+    .modal-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Upload Area */
+    .upload-area {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #f9f9f9;
+      margin-bottom: 20px;
+    }
+
+    .upload-area:hover {
+      border-color: var(--accent);
+      background: rgba(76, 110, 245, 0.05);
+    }
+
+    .upload-icon {
+      font-size: 48px;
+      color: #ccc;
+      margin-bottom: 16px;
+    }
+
+    .upload-text {
+      color: #666;
+      font-size: 1.1rem;
+    }
+
+    /* Slide Preview Box */
+    .slide-preview-box {
+      border: 1px solid #eee;
+      border-radius: 8px;
+      background: #f8f9fa;
+      padding: 20px;
+      margin-bottom: 24px;
+      aspect-ratio: 16/9;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .slide-preview-content {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar Tabs */
+    .sidebar-tabs {
+      display: flex;
+      margin: -16px -16px 16px -16px;
+      border-bottom: 1px solid #eee;
+      padding: 0 16px;
+      background: #f8f9fa;
+      border-radius: 12px 12px 0 0;
+    }
+
+    .sidebar-tab {
+      flex: 1;
+      padding: 16px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      font-weight: 600;
+      color: #666;
+      transition: all 0.2s;
+    }
+
+    .sidebar-tab:hover {
+      color: var(--accent);
+      background: rgba(76, 110, 245, 0.05);
+    }
+
+    .sidebar-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      background: white;
+    }
+
+    .sidebar-content {
+      display: none;
+    }
+
+    .sidebar-content.active {
+      display: block;
+    }
+
+    .resource-section-item {
+      padding: 12px;
+      border: 1px solid #eee;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      background: white;
+      transition: all 0.2s;
+    }
+
+    .resource-section-item:hover {
+      border-color: var(--accent);
+      background: #f8f9fa;
+    }
+
+    .resource-section-item.active {
+      border-color: var(--accent);
+      background: rgba(76, 110, 245, 0.05);
+    }
+
+    .resource-section-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 4px;
+    }
+
+    .resource-section-desc {
+      font-size: 0.8rem;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="logo">
+      <img src="public/logo.svg" alt="LessonLaunch Logo" class="logo-icon">
+      <span>LessonLaunch</span>
+    </div>
+    <nav>
+      <a href="/dashboard.html">Dashboard</a>
+      <button id="save-draft-btn" class="btn-secondary">Save Draft</button>
+    </nav>
+  </header>
+
+  <main class="preview-container">
+    <!-- Sidebar with slide thumbnails -->
+    <aside class="slides-sidebar">
+      <div class="sidebar-tabs">
+        <button class="sidebar-tab active" id="tab-slides" onclick="switchView('slides')">Slides</button>
+        <button class="sidebar-tab" id="tab-resources" onclick="switchView('resources')">Resources</button>
+      </div>
+      
+      <div id="slides-list" class="sidebar-content active">
+        <!-- Populated via JS -->
+      </div>
+      
+      <div id="resources-list" class="sidebar-content">
+        <!-- Populated via JS -->
+      </div>
+    </aside>
+
+    <!-- Main Editor Area -->
+    <section class="editor-main">
+      <div id="editor-content" class="slide-editor">
+        <!-- Populated via JS -->
+      </div>
+    </section>
+  </main>
+
+  <!-- Bottom Action Bar -->
+  <div class="action-bar">
+    <button id="download-resources-btn" class="btn-secondary" style="display: none;">📄 Download Resources</button>
+    <button class="btn-secondary" onclick="regenerateCurrentSlide()">🔄 Regenerate Slide</button>
+    <button class="btn-primary" onclick="finalizeAndDownload()">⬇️ Download PowerPoint</button>
+  </div>
+
+  <!-- Image Search Modal -->
+  <div id="image-search-modal" class="modal-overlay" onclick="if(event.target===this) closeImageSearchModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Select Image</h3>
+        <button class="modal-close" onclick="closeImageSearchModal()">&times;</button>
+      </div>
+      
+      <div class="modal-tabs">
+        <button class="modal-tab active" onclick="switchTab('search')">Search Stock Photos</button>
+        <button class="modal-tab" onclick="switchTab('upload')">Upload Your Own</button>
+      </div>
+
+      <!-- Search Tab -->
+      <div id="tab-search" class="tab-content active">
+        <div class="modal-search">
+          <input type="text" id="image-search-input" placeholder="Enter keywords to search for images..." onkeypress="if(event.key==='Enter') performImageSearch()" />
+          <div class="modal-search-actions">
+            <button class="btn-primary" onclick="performImageSearch()">Search</button>
+            <button class="btn-secondary" onclick="closeImageSearchModal()">Cancel</button>
+          </div>
+        </div>
+        <div id="image-search-results" class="modal-images-grid">
+          <div class="modal-loading">Enter keywords and click Search to find images</div>
+        </div>
+      </div>
+
+      <!-- Upload Tab -->
+      <div id="tab-upload" class="tab-content">
+        <div class="upload-area" onclick="triggerImageUpload()" ondrop="handleDrop(event)" ondragover="event.preventDefault()">
+          <div class="upload-icon">☁️</div>
+          <p class="upload-text">Click to upload or drag and drop image here</p>
+          <p style="font-size: 0.9rem; color: #999; margin-top: 8px;">Supports JPG, PNG, WEBP</p>
+          <input type="file" id="image-upload-input" accept="image/*" style="display: none;" onchange="handleImageUpload(this)" />
+        </div>
+        <div id="upload-status"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Supabase Config
+    const SUPABASE_URL = 'https://eksbbnszmjauxktwmblj.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrc2JibnN6bWphdXhrdHdtYmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzNjg1MjYsImV4cCI6MjA3ODk0NDUyNn0.OE7s9ZAFiDHP3OQVWqB1x0JMR3-abD36Kwq-V8aVZHE';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentLessonData = null;
+    let currentSlideIndex = 0;
+    let currentResourceIndex = 0; // 0: Header, 1...n: Activities, Last: Reflection
+    let currentView = 'slides'; // 'slides' or 'resources'
+    let lessonId = null;
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Check for lesson data in localStorage or URL params
+      const urlParams = new URLSearchParams(window.location.search);
+      lessonId = urlParams.get('id');
+
+      if (lessonId) {
+        await loadLesson(lessonId);
+      } else {
+        // Fallback to localStorage for immediate generation flow
+        const storedData = localStorage.getItem('currentLessonData');
+        if (storedData) {
+          currentLessonData = JSON.parse(storedData);
+          renderCurrentView();
+        }
+      }
+      
+      // Check for available resources
+      checkResources();
+    });
+
+    function switchView(view) {
+      currentView = view;
+      
+      // Update Tabs
+      document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById(`tab-${view}`).classList.add('active');
+      
+      // Update Sidebar Content
+      document.querySelectorAll('.sidebar-content').forEach(c => c.classList.remove('active'));
+      document.getElementById(`${view}-list`).classList.add('active');
+      
+      renderCurrentView();
+    }
+
+    function renderCurrentView() {
+      if (currentView === 'slides') {
+        renderSidebar();
+        renderEditor(currentSlideIndex);
+      } else {
+        renderResourcesSidebar();
+        renderResourceEditor(currentResourceIndex);
+      }
+    }
+
+    async function loadLesson(id) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) window.location.href = '/';
+
+      const { data, error } = await supabase
+        .from('lessons')
+        .select('ai_response, docx_url, additional_resources, topic')
+        .eq('id', id)
+        .single();
+
+      if (data) {
+        currentLessonData = data.ai_response;
+        // Ensure topic is available in slide data
+        if (currentLessonData && data.topic) {
+            currentLessonData.topic = data.topic;
+        }
+        
+        // Store resource info in localStorage for easy access
+        if (data.additional_resources && data.docx_url) {
+            localStorage.setItem('currentLessonResources', JSON.stringify({
+                hasResources: true,
+                docxFilename: data.docx_url,
+                timestamp: data.docx_url.match(/lesson-resources-(\d+)\.docx/)?.[1]
+            }));
+        }
+        renderCurrentView();
+        checkResources();
+      }
+    }
+
+    function renderSidebar() {
+      if (!currentLessonData || !currentLessonData.slides) return;
+      
+      const container = document.getElementById('slides-list');
+      container.innerHTML = currentLessonData.slides.map((slide, index) => `
+        <div class="slide-thumbnail ${index === currentSlideIndex ? 'active' : ''}" 
+             onclick="switchSlide(${index})">
+          <h4>Slide ${index + 1}: ${slide.type}</h4>
+          <p>${slide.title.substring(0, 30)}...</p>
+        </div>
+      `).join('');
+    }
+
+    function renderResourcesSidebar() {
+      if (!currentLessonData) return;
+      
+      // Initialize resource content if missing
+      if (!currentLessonData.resourceContent) {
+        currentLessonData.resourceContent = { items: [] };
+      }
+      
+      const container = document.getElementById('resources-list');
+      let html = '';
+      
+      // 0: General Info
+      html += `
+        <div class="resource-section-item ${currentResourceIndex === 0 ? 'active' : ''}" 
+             onclick="switchResourceSection(0)">
+          <div class="resource-section-title">General & Objectives</div>
+          <div class="resource-section-desc">Title, objectives, details</div>
+        </div>
+      `;
+      
+      // Activities
+      const activities = currentLessonData.resourceContent.items || [];
+      activities.forEach((activity, idx) => {
+        const index = idx + 1; // 1-based index for internal tracking relative to General
+        html += `
+          <div class="resource-section-item ${currentResourceIndex === index ? 'active' : ''}" 
+               onclick="switchResourceSection(${index})">
+            <div class="resource-section-title">Activity ${index}</div>
+            <div class="resource-section-desc">${activity.title || 'Untitled Activity'}</div>
+          </div>
+        `;
+      });
+      
+      // Add Activity Button
+      html += `
+        <button class="btn-secondary" style="width:100%; margin-top:8px;" onclick="addResourceActivity()">
+          + Add New Question Set
+        </button>
+      `;
+      
+      container.innerHTML = html;
+    }
+
+    function switchResourceSection(index) {
+      currentResourceIndex = index;
+      renderResourcesSidebar();
+      renderResourceEditor(index);
+    }
+
+    function renderResourceEditor(index) {
+      const container = document.getElementById('editor-content');
+      
+      if (index === 0) {
+        // General Info
+        container.innerHTML = `
+          <div class="slide-header">
+            <h2>Resource Sheet Details</h2>
+            <span class="slide-type-badge" style="background: var(--accent); color: white;">General</span>
+          </div>
+          
+          <div class="editor-field">
+            <label>Sheet Title (defaults to Lesson Title if empty)</label>
+            <input type="text" value="${currentLessonData.resourceTitle || currentLessonData.title || ''}" 
+                   onchange="updateResourceField('resourceTitle', this.value)" />
+          </div>
+          
+           <div class="editor-field">
+            <label>Learning Question</label>
+            <input type="text" value="${currentLessonData.learningQuestion || ''}" 
+                   onchange="updateLessonField('learningQuestion', this.value)" />
+          </div>
+          
+          <div class="editor-field">
+            <label>Subject & Key Stage</label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <input type="text" value="${currentLessonData.subject || ''}" placeholder="Subject"
+                       onchange="updateLessonField('subject', this.value)" />
+                <input type="text" value="${currentLessonData.keyStage || ''}" placeholder="Key Stage"
+                       onchange="updateLessonField('keyStage', this.value)" />
+            </div>
+          </div>
+        `;
+      } else {
+        // Activity Editor
+        const activityIndex = index - 1;
+        const activity = currentLessonData.resourceContent.items[activityIndex];
+        
+        if (!activity) return;
+        
+        container.innerHTML = `
+          <div class="slide-header">
+            <h2>Edit Activity ${index}</h2>
+            <div style="display:flex; gap:8px;">
+                <button class="btn-secondary" style="padding:4px 8px; font-size:0.8rem; color:#ff4d4d;" onclick="deleteResourceActivity(${activityIndex})">Delete</button>
+            </div>
+          </div>
+          
+          <div class="editor-field">
+            <label>Activity Title</label>
+            <input type="text" value="${activity.title || ''}" 
+                   onchange="updateActivityField(${activityIndex}, 'title', this.value)" />
+          </div>
+          
+          <div class="editor-field">
+            <label>Instructions</label>
+            <textarea rows="3" onchange="updateActivityField(${activityIndex}, 'instructions', this.value)">${activity.instructions || ''}</textarea>
+          </div>
+          
+          <div class="editor-field">
+            <label>Content Text (Passage/Story)</label>
+            <textarea rows="5" onchange="updateActivityField(${activityIndex}, 'contentText', this.value)">${activity.contentText || ''}</textarea>
+          </div>
+          
+          <div class="editor-field">
+            <label>Questions (One per line)</label>
+            <textarea rows="5" onchange="updateActivityQuestions(${activityIndex}, 'tableQuestions', this.value)">${(activity.tableQuestions || []).join('\n')}</textarea>
+          </div>
+          
+          <div class="editor-field">
+             <label>Activity Image</label>
+             <div class="image-selector" id="resource-image-${activityIndex}">
+                ${renderResourceImageSelector(activityIndex, activity)}
+             </div>
+          </div>
+        `;
+      }
+    }
+
+    function renderResourceImageSelector(activityIndex, activity) {
+        const imageUrl = activity.imageUrl;
+        
+        if (imageUrl) {
+            return `
+                <div class="image-option selected" style="position:relative;">
+                    <img src="${imageUrl}" alt="Activity image" />
+                    <button onclick="removeResourceImage(${activityIndex}); event.stopPropagation();" 
+                            title="Remove image"
+                            style="position:absolute; top:6px; right:6px; background:rgba(255,255,255,0.9); color:#ff4d4d; border:none; border-radius:50%; width:24px; height:24px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:bold; box-shadow:0 2px 4px rgba(0,0,0,0.2);">
+                      ×
+                    </button>
+                </div>
+            `;
+        } else {
+            return `
+                <div class="image-option" onclick="openResourceImageSearch(${activityIndex})" title="Add Image">
+                  <div style="height:100%; display:flex; align-items:center; justify-content:center; background:#f8f9fa; color:#666; flex-direction:column; gap:4px; transition:background 0.2s;">
+                    <span style="font-size:24px;">➕</span>
+                    <span style="font-size:12px; font-weight:500;">Add Image</span>
+                  </div>
+                </div>
+            `;
+        }
+    }
+
+    function addResourceActivity() {
+        currentLessonData.resourceContent.items.push({
+            title: 'New Activity',
+            instructions: 'Answer the questions below.',
+            tableQuestions: ['Question 1', 'Question 2'],
+            type: 'qa'
+        });
+        localStorage.setItem('currentLessonData', JSON.stringify(currentLessonData));
+        renderResourcesSidebar();
+        // Switch to new activity
+        switchResourceSection(currentLessonData.resourceContent.items.length);
+    }
+
+    function deleteResourceActivity(index) {
+        if(confirm('Are you sure you want to delete this activity?')) {
+            currentLessonData.resourceContent.items.splice(index, 1);
+            localStorage.setItem('currentLessonData', JSON.stringify(currentLessonData));
+            currentResourceIndex = 0; // Go back to general
+            renderResourcesSidebar();
+            renderResourceEditor(0);
+        }
+    }
+
+    function updateResourceField(field, value) {
+        currentLessonData[field] = value;
+        localStorage.setItem('currentLessonData', JSON.stringify(currentLessonData));
+    }
+
+    function updateLessonField(field, value) {
+        currentLessonData[field] = value;
+        localStorage.setItem('currentLessonData', JSON.stringify(currentLessonData));
+    }
+
+    function updateActivityField(index, field, value) {
+        currentLessonData.resourceContent.items[index][field] = value;
+        localStorage.setItem('currentLessonData', JSON.stringify(currentLessonData));
+    }
+
+    function updateActivityQuestions(index, field, value) {
+        const questions = value.split('\n').filter(q => q.trim() !== '');
+        currentLessonData.resourceContent.items[index][field] = questions;
+        localStorage.setItem('currentLessonData', JSON.stringify(currentLessonData));
+    }
+
+    let currentResourceImageIndex = null;
+
+    function openResourceImageSearch(index) {
+        currentResourceImageIndex = index;
+        currentImageSearchIndex = null; // Clear slide image index
+        
+        const activity = currentLessonData.resourceContent.items[index];
+        const modal = document.getElementById('image-search-modal');
+        const input = document.getElementById('image-search-input');
+        const results = document.getElementById('image-search-results');
+        
+        input.value = activity.title || currentLessonData.topic || '';
+        results.innerHTML = '<div class="modal-loading">Enter keywords and click Search to find images</div>';
+        
+        modal.classList.add('active');
+        input.focus();
+        
+         const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+              closeImageSearchModal();
+              document.removeEventListener('keydown', escapeHandler);
+            }
+          };
+          document.addEventListener('keydown', escapeHandler);
+    }
+    
+    // Modified selectImageFromModal to handle both slides and resources
+    // Note: I need to modify the existing selectImageFromModal function
+    
+    function removeResourceImage(index) {
+        delete currentLessonData.resourceContent.items[index].imageUrl;
+        localStorage.setItem('currentLessonData', JSON.stringify(currentLessonData));
+        renderResourceEditor(index + 1);
+    }
+
+    function switchSlide(index) {
+      currentSlideIndex = index;
+      renderSidebar(); // Update active state
+      renderEditor(index);
+    }
+
+    function renderEditor(index) {
+      if (!currentLessonData || !currentLessonData.slides) return;
+      
+      const slide = currentLessonData.slides[index];
+      const container = document.getElementById('editor-content');
+
+      container.innerHTML = `
+        <div class="slide-header">
+          <h2>Edit Slide ${index + 1}</h2>
+          <span class="slide-type-badge" style="background: var(--accent); color: white;">
+            ${slide.type}
+          </span>
+        </div>
+
+        <div class="editor-field">
+          <label>Slide Title</label>
+          <input type="text" value="${slide.title}" onchange="updateSlide(${index}, 'title', this.value)" />
+        </div>
+
+        <div class="editor-field">
+          <label>Content (Bullets or Text)</label>
+          <textarea rows="6" onchange="updateSlide(${index}, 'content', this.value)">${slide.content}</textarea>
+        </div>
+
+        <div class="editor-field">
+          <label>Teacher Notes</label>
+          <textarea rows="3" onchange="updateSlide(${index}, 'notes', this.value)">${slide.notes || ''}</textarea>
+        </div>
+
+        <div class="editor-field">
+          <label>Visuals & Images (Max 4)</label>
+          <div class="image-selector" id="image-options-${index}">
+            <!-- Add Button -->
+            <div class="image-option" onclick="searchAlternativeImages(${index})" title="Add Image">
+              <div style="height:100%; display:flex; align-items:center; justify-content:center; background:#f8f9fa; color:#666; flex-direction:column; gap:4px; transition:background 0.2s;">
+                <span style="font-size:24px;">➕</span>
+                <span style="font-size:12px; font-weight:500;">Add Image</span>
+              </div>
+            </div>
+            
+            <!-- Selected Images -->
+            ${slide.selectedImages ? slide.selectedImages.map((url, imgIdx) => `
+                <div class="image-option selected" style="position:relative;">
+                    <img src="${url}" alt="Selected image" />
+                    <button onclick="removeImage(${index}, ${imgIdx}); event.stopPropagation();" 
+                            title="Remove image"
+                            style="position:absolute; top:6px; right:6px; background:rgba(255,255,255,0.9); color:#ff4d4d; border:none; border-radius:50%; width:24px; height:24px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:bold; box-shadow:0 2px 4px rgba(0,0,0,0.2); transition:transform 0.2s;">
+                      ×
+                    </button>
+                </div>
+            `).join('') : ''}
+          </div>
+          <p style="font-size:0.9rem; color:#666; margin-top:8px;">
+            Current prompt: ${slide.imageSuggestions?.[0] || 'None'}
+          </p>
+        </div>
+      `;
+    }
+
+    function updateSlide(index, field, value) {
+      currentLessonData.slides[index][field] = value;
+      // Auto-save to localStorage
+      localStorage.setItem('currentLessonData', JSON.stringify(currentLessonData));
+    }
+
+    async function regenerateCurrentSlide() {
+      const slide = currentLessonData.slides[currentSlideIndex];
+      const btn = document.querySelector('.btn-secondary');
+      
+      // Show loading state
+      const originalText = btn ? btn.innerText : '';
+      if(btn) {
+        btn.innerText = 'Regenerating...';
+        btn.disabled = true;
+      }
+
+      try {
+        const session = await supabase.auth.getSession();
+        if (!session?.data?.session) {
+          throw new Error('Please log in to regenerate slides');
+        }
+        
+        const token = session.data.session.access_token;
+
+        const response = await fetch('/api/slides/regenerate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            slideContext: slide,
+            lessonTopic: currentLessonData.topic || currentLessonData.title,
+            slideType: slide.type,
+            allSlides: currentLessonData.slides // Provide context
+          })
+        });
+
+        // Check content type
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") === -1) {
+           const text = await response.text();
+           console.error('Server returned non-JSON response:', text.substring(0, 200));
+           throw new Error(`Server error (${response.status}): Please check console for details.`);
+        }
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(errorData.error || errorData.message || `Server returned ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (result.success && result.data) {
+          currentLessonData.slides[currentSlideIndex] = result.data;
+          localStorage.setItem('currentLessonData', JSON.stringify(currentLessonData));
+          renderEditor(currentSlideIndex);
+          renderSidebar();
+          
+          // Show success message
+          const successMsg = document.createElement('div');
+          successMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; padding: 16px; background: #4caf50; color: white; border-radius: 8px; z-index: 2000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
+          successMsg.textContent = '✓ Slide regenerated successfully!';
+          document.body.appendChild(successMsg);
+          setTimeout(() => successMsg.remove(), 3000);
+        } else {
+          throw new Error(result.error || 'Failed to regenerate slide');
+        }
+      } catch (e) {
+        console.error('Regeneration failed', e);
+        alert('Failed to regenerate slide: ' + (e.message || 'Please try again.'));
+      } finally {
+        if(btn) {
+          btn.innerText = originalText;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    let currentImageSearchIndex = null;
+
+    function openImageSearchModal(index) {
+      currentImageSearchIndex = index;
+      const slide = currentLessonData.slides[index];
+      const modal = document.getElementById('image-search-modal');
+      const input = document.getElementById('image-search-input');
+      const results = document.getElementById('image-search-results');
+      
+      // Set default search query
+      input.value = slide.imageSuggestions?.[0] || currentLessonData.topic || '';
+      results.innerHTML = '<div class="modal-loading">Enter keywords and click Search to find images</div>';
+      
+      modal.classList.add('active');
+      input.focus();
+      
+      // Close on Escape key
+      const escapeHandler = (e) => {
+        if (e.key === 'Escape') {
+          closeImageSearchModal();
+          document.removeEventListener('keydown', escapeHandler);
+        }
+      };
+      document.addEventListener('keydown', escapeHandler);
+    }
+
+    function closeImageSearchModal() {
+      const modal = document.getElementById('image-search-modal');
+      modal.classList.remove('active');
+      currentImageSearchIndex = null;
+      currentResourceImageIndex = null;
+    }
+
+    function switchTab(tabName) {
+      // Update tabs
+      document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+      document.querySelector(`.modal-tab[onclick="switchTab('${tabName}')"]`).classList.add('active');
+      
+      // Update content
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById(`tab-${tabName}`).classList.add('active');
+    }
+
+    function triggerImageUpload() {
+      document.getElementById('image-upload-input').click();
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        const input = document.getElementById('image-upload-input');
+        input.files = e.dataTransfer.files;
+        handleImageUpload(input);
+      }
+    }
+
+    async function handleImageUpload(input) {
+      const file = input.files[0];
+      if (!file) return;
+
+      const statusDiv = document.getElementById('upload-status');
+      statusDiv.innerHTML = '<div class="modal-loading">Uploading image...</div>';
+
+      const formData = new FormData();
+      formData.append('image', file);
+
+      try {
+        const session = await supabase.auth.getSession();
+        if (!session?.data?.session) {
+          throw new Error('Please log in to upload images');
+        }
+        
+        const token = session.data.session.access_token;
+        const response = await fetch('/api/upload/image', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        // Check content type to handle both JSON and non-JSON responses
+        const contentType = response.headers.get("content-type");
+        let result;
+        
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+          result = await response.json();
+        } else {
+          const text = await response.text();
+          console.error('Server returned non-JSON response:', text.substring(0, 200));
+          throw new Error(`Server error (${response.status}): Please check console for details.`);
+        }
+
+        if (!response.ok) {
+          throw new Error(result.error || result.message || `Upload failed: ${response.status}`);
+        }
+
+        if (result.success && result.url) {
+          statusDiv.innerHTML = '<div class="modal-loading" style="color: green;">✓ Upload successful! Selecting...</div>';
+          // Immediately select the uploaded image
+          selectImageFromModal(result.url);
+        } else {
+          throw new Error(result.error || 'Failed to upload image');
+        }
+      } catch (e) {
+        console.error('Upload error:', e);
+        statusDiv.innerHTML = `<div class="modal-error">Upload failed: ${e.message}</div>`;
+      }
+      
+      // Reset input
+      input.value = '';
+    }
+
+    async function performImageSearch() {
+      const input = document.getElementById('image-search-input');
+      const query = input.value.trim();
+      const results = document.getElementById('image-search-results');
+      
+      if (!query) {
+        results.innerHTML = '<div class="modal-error">Please enter search keywords</div>';
+        return;
+      }
+      
+      results.innerHTML = '<div class="modal-loading">Searching for images...</div>';
+
+      try {
+        const session = await supabase.auth.getSession();
+        if (!session?.data?.session) {
+          throw new Error('Please log in to search images');
+        }
+        
+        const token = session.data.session.access_token;
+        const response = await fetch(`/api/slides/images/search?query=${encodeURIComponent(query)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        // Check content type to avoid "Unexpected token <" errors
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") === -1) {
+           const text = await response.text();
+           console.error('Server returned non-JSON response:', text.substring(0, 200));
+           throw new Error(`Server error (${response.status}): Please check console for details.`);
+        }
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(result.error || result.message || `Server returned ${response.status}`);
+        }
+        
+        if (result.success && result.images && result.images.length > 0) {
+          results.innerHTML = result.images.map((url, idx) => `
+            <div class="modal-image-item" onclick="selectImageFromModal('${url}')">
+              <img src="${url}" alt="Stock image ${idx + 1}" loading="lazy" />
+            </div>
+          `).join('');
+        } else {
+          results.innerHTML = '<div class="modal-error">No images found. Try different keywords.</div>';
+        }
+      } catch (e) {
+        console.error('Image search error:', e);
+        results.innerHTML = `<div class="modal-error">Error: ${e.message}</div>`;
+      }
+    }
+
+    function selectImageFromModal(url) {
+      if (currentImageSearchIndex !== null) {
+         // Slide Image
+         selectImage(currentImageSearchIndex, url);
+         closeImageSearchModal();
+         
+         const container = document.getElementById(`image-options-${currentImageSearchIndex}`);
+         if (container) {
+           const successMsg = document.createElement('div');
+           successMsg.style.cssText = 'padding: 12px; background: #4caf50; color: white; border-radius: 8px; margin-top: 12px; text-align: center;';
+           successMsg.textContent = '✓ Image selected! It will be included in the final download.';
+           container.parentNode.appendChild(successMsg);
+           setTimeout(() => successMsg.remove(), 3000);
+         }
+      } else if (currentResourceImageIndex !== null) {
+         // Resource Image
+         selectResourceImage(currentResourceImageIndex, url);
+         closeImageSearchModal();
+         
+         const container = document.getElementById(`resource-image-${currentResourceImageIndex}`);
+         if (container) {
+            const successMsg = document.createElement('div');
+            successMsg.style.cssText = 'padding: 12px; background: #4caf50; color: white; border-radius: 8px; margin-top: 12px; text-align: center;';
+            successMsg.textContent = '✓ Image selected!';
+            container.parentNode.appendChild(successMsg);
+            setTimeout(() => successMsg.remove(), 3000);
+         }
+      }
+    }
+
+    function selectResourceImage(index, url) {
+        currentLessonData.resourceContent.items[index].imageUrl = url;
+        localStorage.setItem('currentLessonData', JSON.stringify(currentLessonData));
+        renderResourceEditor(index + 1);
+    }
+
+    async function searchAlternativeImages(index) {
+      openImageSearchModal(index);
+    }
+
+    function selectImage(index, url) {
+      if (!currentLessonData.slides[index].selectedImages) {
+        currentLessonData.slides[index].selectedImages = [];
+      }
+
+      // Limit to 4 images
+      if (currentLessonData.slides[index].selectedImages.length >= 4) {
+        alert('Maximum 4 images allowed per slide.');
+        return;
+      }
+      
+      currentLessonData.slides[index].selectedImages.push(url);
+      
+      // Save to localStorage
+      localStorage.setItem('currentLessonData', JSON.stringify(currentLessonData));
+      
+      // Visually update
+      renderEditor(index);
+    }
+
+    function removeImage(slideIndex, imgIndex) {
+      if (!currentLessonData.slides[slideIndex].selectedImages) return;
+      
+      currentLessonData.slides[slideIndex].selectedImages.splice(imgIndex, 1);
+      localStorage.setItem('currentLessonData', JSON.stringify(currentLessonData));
+      renderEditor(slideIndex);
+    }
+
+    async function finalizeAndDownload() {
+      const btn = document.querySelector('.btn-primary');
+      const originalText = btn.innerText;
+      btn.innerText = 'Generating File...';
+      btn.disabled = true;
+
+      try {
+        const session = await supabase.auth.getSession();
+        const token = session?.data?.session?.access_token;
+        
+        if (!token) {
+           alert('Please log in to download');
+           return;
+        }
+
+        const response = await fetch('/api/generate-slides/finalize', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            lessonId: lessonId,
+            slideData: currentLessonData
+          })
+        });
+
+        // Check content type
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") === -1) {
+           const text = await response.text();
+           console.error('Server returned non-JSON response:', text.substring(0, 200));
+           throw new Error(`Server error (${response.status}): Please check console for details.`);
+        }
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(errorData.error || errorData.message || `Server returned ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (result.success && result.timestamp) {
+          // Show storage warning if present
+          if (result.storageWarning) {
+            // Remove existing warning if any
+            const existingWarning = document.getElementById('storage-warning-preview');
+            if (existingWarning) existingWarning.remove();
+            
+            const warningDiv = document.createElement('div');
+            warningDiv.id = 'storage-warning-preview';
+            warningDiv.style.cssText = 'margin: 16px 0; padding: 16px; background: rgba(255, 193, 7, 0.1); border-left: 4px solid #ffc107; border-radius: 8px;';
+            warningDiv.innerHTML = `
+              <div style="display: flex; align-items: start; gap: 12px;">
+                <span style="font-size: 1.2em;">⚠️</span>
+                <div style="flex: 1;">
+                  <strong style="color: #ff9800; display: block; margin-bottom: 4px;">Storage Warning</strong>
+                  <p style="margin: 0; color: #666; font-size: 0.9rem;">${result.storageWarning}</p>
+                </div>
+              </div>
+            `;
+            
+            // Insert before download button
+            const downloadSection = document.querySelector('.action-bar'); // Fixed selector from .download-section to .action-bar or check logic
+            if (downloadSection && !document.getElementById('storage-warning-preview')) {
+               // Logic handled above by removing existing warning
+               downloadSection.insertBefore(warningDiv, downloadSection.firstChild);
+            }
+          }
+          
+          // Update Resources Button if available
+          if (result.docxFilename) {
+              const resourcesBtn = document.getElementById('download-resources-btn');
+              if (resourcesBtn) {
+                  resourcesBtn.style.display = 'block';
+                  resourcesBtn.onclick = () => {
+                      window.location.href = `/api/download-resources/${result.timestamp}`;
+                  };
+                  
+                  // Also update localStorage
+                  localStorage.setItem('currentLessonResources', JSON.stringify({
+                    hasResources: true,
+                    docxFilename: result.docxFilename,
+                    timestamp: result.timestamp
+                  }));
+              }
+          }
+
+          // Download PPTX
+          const link = document.createElement('a');
+          link.href = `/api/download-pptx/${result.timestamp}`;
+          link.download = result.pptxFilename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          throw new Error(result.error || result.message || 'Failed to generate file');
+        }
+      } catch (e) {
+        console.error('Finalize error:', e);
+        alert('Error generating final file: ' + (e.message || 'Unknown error'));
+      } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    // Add event listener for Save Draft
+    const saveDraftBtn = document.getElementById('save-draft-btn');
+    if (saveDraftBtn) {
+        saveDraftBtn.addEventListener('click', async () => {
+            if (!lessonId) {
+                alert('Draft saved to browser storage!');
+                return;
+            }
+            
+            const btn = document.getElementById('save-draft-btn');
+            const originalText = btn.innerText;
+            btn.innerText = 'Saving...';
+            
+            try {
+                const session = await supabase.auth.getSession();
+                if (!session?.data?.session) return;
+                
+                const { error } = await supabase
+                    .from('lessons')
+                    .update({ 
+                        ai_response: currentLessonData,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', lessonId);
+                    
+                if (error) throw error;
+                
+                btn.innerText = 'Saved!';
+                setTimeout(() => btn.innerText = originalText, 2000);
+            } catch (e) {
+                console.error('Save error:', e);
+                alert('Error saving draft to cloud');
+                btn.innerText = originalText;
+            }
+        });
+    }
+
+    // Check for resources in localStorage or load from DB
+    async function checkResources() {
+        const resourcesBtn = document.getElementById('download-resources-btn');
+        if (!resourcesBtn) return;
+        
+        const stored = localStorage.getItem('currentLessonResources');
+        if (stored) {
+            try {
+                const resources = JSON.parse(stored);
+                if (resources.hasResources && resources.timestamp) {
+                    resourcesBtn.style.display = 'block'; // Changed from flex to block/inline-block as per CSS
+                    resourcesBtn.onclick = () => {
+                        window.location.href = `/api/download-resources/${resources.timestamp}`;
+                    };
+                }
+            } catch (e) {
+                console.error('Error parsing resources', e);
+            }
+        }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Transform your lesson notes into polished PowerPoint slides in seconds with AI-powered lesson planning." />
+    <title>LessonLaunch | Turn Teacher Notes into Ready-to-Use Slides</title>
+    <link rel="icon" type="image/svg+xml" href="public/logo.svg" />
+    <link rel="stylesheet" href="styles.css" />
+    
+    <!-- Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const form = document.querySelector('.hero__form');
+        if (!form) return; // Exit if form doesn't exist
+        
+        const submitButton = form.querySelector('button[type="submit"]');
+        if (!submitButton) return; // Exit if submit button doesn't exist
+        
+        const fileInput = document.getElementById('lesson-assets');
+        const notesFileInput = document.getElementById('notes-file');
+        const topicInput = document.getElementById('lesson-topic');
+        const notesTextarea = document.getElementById('lesson-notes');
+        const previewTitle = document.getElementById('preview-title');
+        const previewSubtitle = document.getElementById('preview-subtitle');
+        const previewContainer = document.getElementById('interactive-preview');
+        
+        // Update preview as user types
+        function updatePreview() {
+          if (!previewTitle || !previewSubtitle || !previewContainer) return;
+          
+          const topic = topicInput ? topicInput.value.trim() : '';
+          const notes = notesTextarea ? notesTextarea.value.trim() : '';
+          
+          if (topic) {
+            previewTitle.textContent = `Creating "${topic}" PowerPoint presentation...`;
+            if (notes) {
+              previewSubtitle.textContent = `Processing your notes and generating curriculum-aligned slides`;
+            } else {
+              previewSubtitle.textContent = `Ready to generate your lesson slides`;
+            }
+            previewContainer.classList.add('has-content');
+          } else if (notes) {
+            previewTitle.textContent = `Creating PowerPoint presentation...`;
+            previewSubtitle.textContent = `Processing your notes and generating curriculum-aligned slides`;
+            previewContainer.classList.add('has-content');
+          } else {
+            previewTitle.textContent = `Start typing to see your presentation preview`;
+            previewSubtitle.textContent = `Enter your lesson topic and notes to get started`;
+            previewContainer.classList.remove('has-content');
+          }
+        }
+        
+        // Add event listeners for real-time updates
+        if (topicInput) {
+          topicInput.addEventListener('input', updatePreview);
+          topicInput.addEventListener('keyup', updatePreview);
+        }
+        if (notesTextarea) {
+          notesTextarea.addEventListener('input', updatePreview);
+          notesTextarea.addEventListener('keyup', updatePreview);
+        }
+        
+        // Tab switching for notes input
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        tabBtns.forEach(btn => {
+          btn.addEventListener('click', function() {
+            const targetTab = this.getAttribute('data-tab');
+            
+            // Update active states
+            tabBtns.forEach(b => b.classList.remove('active'));
+            tabContents.forEach(c => c.classList.remove('active'));
+            
+            this.classList.add('active');
+            document.querySelector(`[data-tab-content="${targetTab}"]`).classList.add('active');
+          });
+        });
+        
+        // Duration pills sync with hidden select
+        const durationRadios = document.querySelectorAll('input[name="duration-radio"]');
+        const durationSelect = document.getElementById('lesson-duration');
+        
+        durationRadios.forEach(radio => {
+          radio.addEventListener('change', function() {
+            if (durationSelect) {
+              durationSelect.value = this.value;
+            }
+          });
+        });
+        
+        // Advanced options toggle
+        const advancedToggle = document.getElementById('advanced-toggle');
+        const advancedOptions = document.getElementById('advanced-options');
+        
+        if (advancedToggle && advancedOptions) {
+          advancedToggle.addEventListener('click', function() {
+            const isOpen = advancedOptions.style.display !== 'none';
+            advancedOptions.style.display = isOpen ? 'none' : 'block';
+            this.querySelector('.toggle-arrow').textContent = isOpen ? '▼' : '▲';
+          });
+        }
+        
+        // File upload zone interaction
+        const uploadZone = document.getElementById('upload-zone');
+        const fileCountDiv = document.getElementById('file-count');
+        
+        if (uploadZone && notesFileInput) {
+          uploadZone.addEventListener('click', function(e) {
+            if (e.target !== notesFileInput) {
+              notesFileInput.click();
+            }
+          });
+          
+          // Drag and drop
+          uploadZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('dragover');
+          });
+          
+          uploadZone.addEventListener('dragleave', function() {
+            this.classList.remove('dragover');
+          });
+          
+          uploadZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+              notesFileInput.files = e.dataTransfer.files;
+              notesFileInput.dispatchEvent(new Event('change'));
+            }
+          });
+          
+          // File count display
+          notesFileInput.addEventListener('change', function() {
+            const count = this.files.length;
+            if (count > 0) {
+              fileCountDiv.innerHTML = `
+                <div class="file-list">
+                  ${Array.from(this.files).map(f => `<div class="file-item">📄 ${f.name}</div>`).join('')}
+                </div>
+              `;
+            } else {
+              fileCountDiv.innerHTML = '';
+            }
+          });
+        }
+        
+        form.addEventListener('submit', async function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Disable submit button
+          const originalButtonText = submitButton.textContent;
+          submitButton.disabled = true;
+          submitButton.textContent = 'Generating your slides...';
+          
+          try {
+            // Collect form data
+            const formData = new FormData();
+            formData.append('topic', document.getElementById('lesson-topic').value);
+            formData.append('duration', document.getElementById('lesson-duration').value);
+            formData.append('curriculumCode', document.getElementById('curriculum-code').value);
+            formData.append('keyVocabulary', document.getElementById('key-vocabulary').value);
+            formData.append('notes', document.getElementById('lesson-notes').value);
+            formData.append('additionalResources', document.getElementById('additional-resources').checked);
+            formData.append('interactiveLesson', document.getElementById('interactive-lesson').checked);
+            formData.append('sendScaffolding', document.getElementById('send-scaffolding').checked);
+            formData.append('generateImages', document.getElementById('generate-images').checked);
+            
+            // Add notes files if provided (can be multiple)
+            const notesFile = document.getElementById('notes-file');
+            if (notesFile && notesFile.files.length > 0) {
+              // Append all selected files
+              Array.from(notesFile.files).forEach((file, index) => {
+                formData.append('notesFiles', file);
+              });
+            }
+            
+            // Add image files if provided
+            if (fileInput && fileInput.files.length > 0) {
+              Array.from(fileInput.files).forEach((file, index) => {
+                formData.append('images', file);
+              });
+            }
+            
+            // Show loading state with progress updates
+            const loadingMessage = document.createElement('div');
+            loadingMessage.id = 'loading-message';
+            loadingMessage.style.cssText = 'margin-top: 16px; padding: 16px; background: rgba(76, 110, 245, 0.1); border-radius: 10px; text-align: center; color: var(--accent); transition: all 0.3s ease;';
+            
+            const loadingSteps = [
+              '🤖 Analyzing your notes and topic...',
+              '📚 Aligning with National Curriculum...',
+              '🧠 Structuring lesson flow and objectives...',
+              '✨ Generating slide content and activities...',
+              '🎨 Designing slides and selecting visuals...',
+              '📝 Creating resources and worksheets...',
+              '🚀 Finalizing your lesson pack...'
+            ];
+            
+            let stepIndex = 0;
+            loadingMessage.textContent = loadingSteps[0];
+            form.parentNode.insertBefore(loadingMessage, form.nextSibling);
+            
+            // Cycle through messages
+            const progressInterval = setInterval(() => {
+              stepIndex = (stepIndex + 1) % loadingSteps.length;
+              // Don't loop back to start if we're deep in the process, just stay on the last few
+              if (stepIndex === 0) stepIndex = 2; 
+              loadingMessage.textContent = loadingSteps[stepIndex];
+            }, 3000);
+            
+            // Send to backend
+            // Get JWT token from session
+            const token = window.supabaseSession?.access_token;
+            
+            if (!token) {
+              throw new Error('Please log in again');
+            }
+            
+            // Send to server with Authorization header
+            const response = await fetch('/api/generate-slides', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`
+              },
+              body: formData
+            });
+            
+            if (!response.ok) {
+              let errorMessage = 'Failed to generate slides';
+              try {
+                const errorData = await response.json();
+                errorMessage = errorData.message || errorData.error || errorMessage;
+              } catch (e) {
+                // If response isn't JSON, use status text
+                errorMessage = response.statusText || errorMessage;
+              }
+              throw new Error(errorMessage);
+            }
+            
+            // Get JSON response
+            clearInterval(progressInterval); // Stop progress updates
+            const data = await response.json();
+            
+            if (!data.success) {
+              throw new Error(data.error || 'Failed to generate slides');
+            }
+
+            // Store preview data in localStorage
+            localStorage.setItem('currentLessonData', JSON.stringify(data.ai_response || {}));
+            
+            // Store resource info for preview page
+            localStorage.setItem('currentLessonResources', JSON.stringify({
+              hasResources: data.hasResources,
+              docxFilename: data.docxFilename,
+              timestamp: data.timestamp,
+              lessonId: data.lessonId
+            }));
+            
+            // Show storage warnings if any
+            if (data.storageWarnings && data.storageWarnings.length > 0) {
+              const warningDiv = document.createElement('div');
+              warningDiv.id = 'storage-warning';
+              warningDiv.style.cssText = 'margin-top: 16px; padding: 16px; background: rgba(255, 193, 7, 0.1); border-left: 4px solid #ffc107; border-radius: 8px;';
+              warningDiv.innerHTML = `
+                <div style="display: flex; align-items: start; gap: 12px;">
+                  <span style="font-size: 1.2em;">⚠️</span>
+                  <div style="flex: 1;">
+                    <strong style="color: #ff9800; display: block; margin-bottom: 8px;">Storage Warning</strong>
+                    <p style="margin: 0 0 8px 0; color: #666; font-size: 0.9rem;">
+                      Your files were generated successfully, but there was an issue uploading to cloud storage:
+                    </p>
+                    <ul style="margin: 0; padding-left: 20px; color: #666; font-size: 0.9rem;">
+                      ${data.storageWarnings.map(w => `<li>${w}</li>`).join('')}
+                    </ul>
+                    <p style="margin: 8px 0 0 0; color: #666; font-size: 0.85rem; font-style: italic;">
+                      Files are available locally for 5 minutes. Please download them now or contact support if this persists.
+                    </p>
+                  </div>
+                </div>
+              `;
+              form.parentNode.insertBefore(warningDiv, form.nextSibling);
+            }
+            
+            // Show success message
+            loadingMessage.style.background = 'rgba(53, 197, 122, 0.1)';
+            loadingMessage.style.color = '#24a76c';
+            loadingMessage.textContent = '✅ Slides generated! Redirecting to preview...';
+            
+            // Redirect to preview page
+            setTimeout(() => {
+              if (data.lessonId) {
+                window.location.href = `/preview.html?id=${data.lessonId}`;
+              } else {
+                window.location.href = '/preview.html';
+              }
+            }, 1500);
+            
+          } catch (error) {
+            console.error('Error:', error);
+            if (typeof progressInterval !== 'undefined') clearInterval(progressInterval);
+            
+            // Show error message
+            const errorMessage = document.createElement('div');
+            errorMessage.style.cssText = 'margin-top: 16px; padding: 16px; background: rgba(255, 107, 107, 0.1); border-radius: 10px; text-align: center; color: #ff6b6b;';
+            errorMessage.textContent = `❌ Error: ${error.message || 'Failed to generate slides. Please try again.'}`;
+            form.parentNode.insertBefore(errorMessage, form.nextSibling);
+            
+            // Remove error message after 5 seconds
+            setTimeout(() => {
+              errorMessage.remove();
+            }, 5000);
+
+            // Remove loading message if it exists
+            const loadingMsg = document.getElementById('loading-message');
+            if (loadingMsg) loadingMsg.remove();
+
+          } finally {
+            // Re-enable submit button
+            submitButton.disabled = false;
+            submitButton.textContent = originalButtonText;
+          }
+        });
+        
+        // Load user folders for organization (kept for potential future use)
+        window.loadUserFolders = async function(lessonId) {
+          // Implementation removed as we redirect away
+        };
+      });
+    </script>
+  </head>
+  <body>
+    <!-- Login Screen -->
+    <div id="login-screen" class="login-screen">
+      <div class="login-container">
+        <div class="login-card">
+          <h1 class="login-title">
+            <img src="public/logo.svg" alt="" class="logo-icon-lg">
+            LessonLaunch
+          </h1>
+          <p class="login-subtitle">AI-Powered Lesson Planning for Teachers</p>
+          
+          <div id="auth-message" style="display: none; padding: 12px; margin-bottom: 16px; border-radius: 8px; font-size: 0.9rem;"></div>
+          
+          <form id="login-form" class="login-form">
+            <!-- Name field - only shown during signup -->
+            <div id="name-field" style="display: none;">
+              <label for="user-name">Full Name</label>
+              <input 
+                type="text" 
+                id="user-name" 
+                name="user-name" 
+                placeholder="John Smith" 
+              />
+            </div>
+            
+            <label for="user-email">Email</label>
+            <input 
+              type="email" 
+              id="user-email" 
+              name="user-email" 
+              placeholder="teacher@school.com" 
+              required 
+            />
+            
+            <label for="user-password">Password</label>
+            <input 
+              type="password" 
+              id="user-password" 
+              name="user-password" 
+              placeholder="Enter your password" 
+              minlength="6"
+              required 
+            />
+            
+            <button type="submit" class="login-btn" id="auth-submit-btn">Log In</button>
+          </form>
+          
+          <div class="login-footer">
+            <p id="auth-toggle-text">
+              Don't have an account? 
+              <a href="#" id="auth-toggle-link" style="color: var(--accent); font-weight: 500;">Sign up</a>
+            </p>
+            <p style="margin-top: 8px; font-size: 0.85rem; color: var(--subtext);">
+              <a href="#" id="forgot-password-link" style="color: var(--subtext);">Forgot password?</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main App (hidden until logged in) -->
+    <div id="main-app" style="display: none;">
+    <header class="nav">
+      <div class="logo">
+        <img src="public/logo.svg" alt="LessonLaunch Logo" class="logo-icon">
+        <span>LessonLaunch</span>
+      </div>
+      <nav>
+        <a href="/dashboard.html">Dashboard</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#features">Features</a>
+        <a href="#cta" class="nav-cta">Get Started</a>
+        <a href="#" id="logout-btn" style="color: #ff6b6b;">Logout</a>
+      </nav>
+    </header>
+
+    <!-- Skip to main content for keyboard users -->
+    <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+    <main id="main-content" role="main">
+      <section class="hero" id="cta" aria-labelledby="hero-heading">
+        <div class="hero__content">
+          <h1 id="hero-heading">Turn Your Notes into Polished Lessons</h1>
+          <p class="hero__subtitle">
+            AI-powered slide decks ready in 60 seconds. Curriculum-aligned, classroom-ready.
+          </p>
+          
+          <form class="hero__form" aria-label="Lesson generation form" role="form">
+            <!-- Topic Input (Large & Prominent) -->
+            <div class="form-group form-group--prominent">
+              <label for="lesson-topic">What are you teaching?</label>
+              <input 
+                type="text" 
+                id="lesson-topic" 
+                name="lesson-topic" 
+                placeholder="e.g. Habitats for Year 3 Science" 
+                class="input-large"
+                aria-required="true"
+                aria-describedby="topic-hint"
+              />
+              <span id="topic-hint" class="sr-only">Enter the main topic or subject you want to teach</span>
+            </div>
+
+            <!-- Duration Pills -->
+            <div class="form-group">
+              <label id="duration-label">Lesson duration</label>
+              <div class="duration-pills" role="radiogroup" aria-labelledby="duration-label">
+                <input type="radio" name="duration-radio" id="duration-30" value="30" aria-label="30 minute lesson" />
+                <label for="duration-30" class="pill-btn">⏱️ 30 min</label>
+                
+                <input type="radio" name="duration-radio" id="duration-60" value="60" checked aria-label="60 minute lesson" />
+                <label for="duration-60" class="pill-btn">⏱️ 60 min</label>
+                
+                <input type="radio" name="duration-radio" id="duration-90" value="90" aria-label="90 minute lesson" />
+                <label for="duration-90" class="pill-btn">⏱️ 90 min</label>
+              </div>
+              <select id="lesson-duration" name="lesson-duration" style="display: none;">
+                <option value="30">30 minutes</option>
+                <option value="60" selected>60 minutes</option>
+                <option value="90">90 minutes</option>
+              </select>
+            </div>
+
+            <!-- New Fields: Curriculum & Vocabulary -->
+            <div class="form-group">
+              <label for="curriculum-code">Curriculum Focus (Optional)</label>
+              <input 
+                type="text" 
+                id="curriculum-code" 
+                name="curriculum-code" 
+                placeholder="e.g. Year 4 - Multiplication tables check" 
+                class="input-medium"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="key-vocabulary">Key Vocabulary (Optional)</label>
+              <input 
+                type="text" 
+                id="key-vocabulary" 
+                name="key-vocabulary" 
+                placeholder="e.g. numerator, denominator, equivalent fraction" 
+                class="input-medium"
+              />
+              <small style="color: var(--subtext);">Comma separated words to include</small>
+            </div>
+
+            <!-- Quick Options (Icon Pills) -->
+            <div class="form-group">
+              <label id="addons-label">Quick add-ons</label>
+              <div class="quick-options" role="group" aria-labelledby="addons-label">
+                <label class="option-pill">
+                  <input type="checkbox" id="additional-resources" name="additional-resources" aria-label="Include additional resources" />
+                  <span class="pill-content">
+                    <span class="pill-icon" aria-hidden="true">📄</span>
+                    <span class="pill-text">Extra Resources</span>
+                  </span>
+                </label>
+                
+                <label class="option-pill">
+                  <input type="checkbox" id="interactive-lesson" name="interactive-lesson" aria-label="Make lesson interactive" />
+                  <span class="pill-content">
+                    <span class="pill-icon" aria-hidden="true">🎯</span>
+                    <span class="pill-text">Interactive</span>
+                  </span>
+                </label>
+                
+                <label class="option-pill">
+                  <input type="checkbox" id="send-scaffolding" name="send-scaffolding" aria-label="Add SEND support scaffolding" />
+                  <span class="pill-content">
+                    <span class="pill-icon" aria-hidden="true">🧩</span>
+                    <span class="pill-text">SEND Support</span>
+                  </span>
+                </label>
+                
+                <label class="option-pill">
+                  <input type="checkbox" id="generate-images" name="generate-images" aria-label="Generate stock images for slides" />
+                  <span class="pill-content">
+                    <span class="pill-icon" aria-hidden="true">🎨</span>
+                    <span class="pill-text">Stock Images</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Notes Input with Tabs -->
+            <div class="form-group">
+              <div class="input-tabs" role="tablist" aria-label="Notes input method">
+                <button type="button" class="tab-btn active" data-tab="text" role="tab" aria-selected="true" aria-controls="notes-text-panel" id="notes-text-tab">✍️ Type Notes</button>
+                <button type="button" class="tab-btn" data-tab="upload" role="tab" aria-selected="false" aria-controls="notes-upload-panel" id="notes-upload-tab">📎 Upload Files</button>
+              </div>
+              
+              <div class="tab-content active" data-tab-content="text" role="tabpanel" id="notes-text-panel" aria-labelledby="notes-text-tab">
+                <textarea 
+                  id="lesson-notes" 
+                  name="lesson-notes" 
+                  rows="5" 
+                  placeholder="Paste your lesson notes, objectives, or key points here..."
+                  class="textarea-modern"
+                  aria-label="Lesson notes"
+                  aria-describedby="notes-hint"
+                ></textarea>
+                <span id="notes-hint" class="sr-only">Enter your lesson notes, learning objectives, or key teaching points</span>
+              </div>
+              
+              <div class="tab-content" data-tab-content="upload" role="tabpanel" id="notes-upload-panel" aria-labelledby="notes-upload-tab">
+                <div class="upload-zone" id="upload-zone">
+                  <input 
+                    type="file" 
+                    id="notes-file" 
+                    name="notesFile" 
+                    accept=".txt,.docx,.pdf,.pptx" 
+                    multiple 
+                    class="file-input-hidden"
+                    aria-label="Upload notes files"
+                    aria-describedby="upload-hint"
+                  />
+                  <div class="upload-prompt">
+                    <span class="upload-icon" aria-hidden="true">📁</span>
+                    <p><strong>Drop files here</strong> or click to browse</p>
+                    <small id="upload-hint">Supports .txt, .docx, .pdf, .pptx • Multiple files OK</small>
+                  </div>
+                  <div id="file-count" class="file-count" aria-live="polite"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Advanced Options (Collapsible) -->
+            <div class="form-group">
+              <button type="button" class="advanced-toggle" id="advanced-toggle">
+                <span>⚙️ Advanced Options</span>
+                <span class="toggle-arrow">▼</span>
+              </button>
+              <div class="advanced-options" id="advanced-options" style="display: none;">
+                <label for="lesson-assets" class="upload-label">
+                  <span class="label-icon">🖼️</span>
+                  <span>Add reference images or diagrams</span>
+                </label>
+                <div class="file-input">
+                  <input type="file" id="lesson-assets" name="lesson-assets" accept="image/*" multiple />
+                  <span class="file-input__prompt">Click to add images</span>
+                </div>
+              </div>
+            </div>
+
+            <button type="submit" class="btn-generate" aria-label="Generate lesson presentation">
+              <span class="btn-icon" aria-hidden="true">✨</span>
+              Generate My Lesson
+            </button>
+            
+            <!-- Status announcements for screen readers -->
+            <div id="generation-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+          </form>
+        </div>
+        <div class="hero__visual">
+          <div class="interactive-preview" id="interactive-preview">
+            <div class="preview-content">
+              <div class="preview-icon">📊</div>
+              <h2 id="preview-title">Start typing to see your presentation preview</h2>
+              <p id="preview-subtitle">Enter your lesson topic and notes to get started</p>
+            </div>
+          </div>
+          
+          <!-- Download section removed in favor of preview -->
+          <div class="download-section" id="download-section" style="display: none;">
+            <!-- Content hidden as we redirect to preview -->
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="how-it-works">
+        <div class="section__header">
+          <h2>How LessonLaunch works</h2>
+          <p>Streamlined for busy teachers, powerful enough for any subject.</p>
+        </div>
+        <div class="steps">
+          <article class="step">
+            <div class="step__number">1</div>
+            <h3>Share your plan</h3>
+            <p>Paste lesson outcomes or attach your staffroom notes—typed or dictated.</p>
+          </article>
+          <article class="step">
+            <div class="step__number">2</div>
+            <h3>We structure the slides</h3>
+            <p>Our AI maps key moments, questions, and resources into a lesson flow.</p>
+          </article>
+          <article class="step">
+            <div class="step__number">3</div>
+            <h3>Review & Download</h3>
+            <p>Preview your slides, tweak content, and export to PowerPoint.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="features">
+        <div class="section__header">
+          <h2>Designed with primary classrooms in mind</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>Curriculum aware</h3>
+            <p>Generates objectives aligned with UK KS1 & KS2 standards for every subject.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Visual inspiration</h3>
+            <p>Suggests age-appropriate imagery and allows you to add school photos.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Differentiation built in</h3>
+            <p>Provides stretch and support pathways plus optional homework ideas.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Voice friendly</h3>
+            <p>Drag in quick voice memos—perfect for planning on the go.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div>
+        <h4>LessonLaunch</h4>
+        <p>Helping teachers reclaim planning time with ready-to-teach slides.</p>
+      </div>
+      <div class="footer__links">
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+        <a href="#">Contact</a>
+      </div>
+    </footer>
+    </div>
+    <!-- End Main App -->
+
+    <script>
+      // Supabase Authentication
+      (function() {
+        // Initialize Supabase client
+        const SUPABASE_URL = 'https://eksbbnszmjauxktwmblj.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrc2JibnN6bWphdXhrdHdtYmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzNjg1MjYsImV4cCI6MjA3ODk0NDUyNn0.OE7s9ZAFiDHP3OQVWqB1x0JMR3-abD36Kwq-V8aVZHE';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        // Store globally for use in form submission
+        window.supabaseClient = supabase;
+        window.supabaseSession = null;
+        
+        const loginScreen = document.getElementById('login-screen');
+        const mainApp = document.getElementById('main-app');
+        const loginForm = document.getElementById('login-form');
+        const logoutBtn = document.getElementById('logout-btn');
+        const authMessage = document.getElementById('auth-message');
+        const authSubmitBtn = document.getElementById('auth-submit-btn');
+        const authToggleLink = document.getElementById('auth-toggle-link');
+        const forgotPasswordLink = document.getElementById('forgot-password-link');
+        
+        let isSignupMode = false;
+        
+        // Show message (success or error)
+        function showMessage(message, isError = false) {
+          authMessage.textContent = message;
+          authMessage.style.display = 'block';
+          authMessage.style.background = isError ? 'rgba(255, 107, 107, 0.1)' : 'rgba(53, 197, 122, 0.1)';
+          authMessage.style.color = isError ? '#ff6b6b' : '#24a76c';
+          
+          setTimeout(() => {
+            authMessage.style.display = 'none';
+          }, 5000);
+        }
+        
+        // Toggle between login and signup
+        authToggleLink.addEventListener('click', function(e) {
+          e.preventDefault();
+          isSignupMode = !isSignupMode;
+          
+          const nameField = document.getElementById('name-field');
+          const nameInput = document.getElementById('user-name');
+          
+          if (isSignupMode) {
+            authSubmitBtn.textContent = 'Sign Up';
+            authToggleLink.textContent = 'Log in';
+            document.getElementById('auth-toggle-text').childNodes[0].textContent = 'Already have an account? ';
+            nameField.style.display = 'block';
+            nameInput.required = true;
+          } else {
+            authSubmitBtn.textContent = 'Log In';
+            authToggleLink.textContent = 'Sign up';
+            document.getElementById('auth-toggle-text').childNodes[0].textContent = "Don't have an account? ";
+            nameField.style.display = 'none';
+            nameInput.required = false;
+          }
+        });
+        
+        // Forgot password
+        forgotPasswordLink.addEventListener('click', async function(e) {
+          e.preventDefault();
+          
+          const email = document.getElementById('user-email').value.trim();
+          
+          if (!email) {
+            showMessage('Please enter your email address first', true);
+            return;
+          }
+          
+          authSubmitBtn.disabled = true;
+          authSubmitBtn.textContent = 'Sending...';
+          
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin + '/reset-password'
+          });
+          
+          authSubmitBtn.disabled = false;
+          authSubmitBtn.textContent = isSignupMode ? 'Sign Up' : 'Log In';
+          
+          if (error) {
+            showMessage(error.message, true);
+          } else {
+            showMessage('Password reset email sent! Check your inbox.');
+          }
+        });
+        
+        // Check if user is already logged in
+        async function checkSession() {
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          if (session) {
+            window.supabaseSession = session;
+            loginScreen.style.display = 'none';
+            mainApp.style.display = 'block';
+            console.log('User logged in:', session.user.email);
+          } else {
+            loginScreen.style.display = 'flex';
+            mainApp.style.display = 'none';
+          }
+        }
+        
+        // Run on page load
+        checkSession();
+        
+        // Handle login/signup form submission
+        loginForm.addEventListener('submit', async function(e) {
+          e.preventDefault();
+          
+          const email = document.getElementById('user-email').value.trim();
+          const password = document.getElementById('user-password').value;
+          const name = document.getElementById('user-name').value.trim();
+          
+          if (!email || !password) {
+            showMessage('Please enter both email and password', true);
+            return;
+          }
+          
+          if (isSignupMode && !name) {
+            showMessage('Please enter your full name', true);
+            return;
+          }
+          
+          authSubmitBtn.disabled = true;
+          authSubmitBtn.textContent = isSignupMode ? 'Creating account...' : 'Logging in...';
+          
+          try {
+            if (isSignupMode) {
+              // Sign up
+              const { data, error } = await supabase.auth.signUp({
+                email: email,
+                password: password
+              });
+              
+              if (error) throw error;
+              
+              if (data?.user) {
+                // Create user record in database with name
+                const { error: dbError } = await supabase
+                  .from('users')
+                  .insert([
+                    { 
+                      id: data.user.id,
+                      email: email,
+                      name: name,
+                      created_at: new Date().toISOString()
+                    }
+                  ]);
+                
+                if (dbError) {
+                  console.error('Error creating user record:', dbError);
+                }
+                
+                showMessage('Account created! Please check your email to verify.');
+                
+                // Auto-switch to login mode after 2 seconds
+                setTimeout(() => {
+                  isSignupMode = false;
+                  authSubmitBtn.textContent = 'Log In';
+                  authToggleLink.textContent = 'Sign up';
+                  document.getElementById('auth-toggle-text').childNodes[0].textContent = "Don't have an account? ";
+                  document.getElementById('name-field').style.display = 'none';
+                  document.getElementById('user-name').required = false;
+                  document.getElementById('user-name').value = '';
+                }, 2000);
+              }
+            } else {
+              // Log in
+              const { data, error } = await supabase.auth.signInWithPassword({
+                email: email,
+                password: password
+              });
+              
+              if (error) throw error;
+              
+              if (data?.session) {
+                window.supabaseSession = data.session;
+                
+                // Update last_login in database
+                await supabase
+                  .from('users')
+                  .update({ last_login: new Date().toISOString() })
+                  .eq('id', data.user.id);
+                
+                // Hide login, show main app
+                loginScreen.style.display = 'none';
+                mainApp.style.display = 'block';
+                
+                showMessage('Welcome back!');
+                console.log('User logged in:', data.user.email);
+              }
+            }
+          } catch (error) {
+            showMessage(error.message, true);
+            console.error('Auth error:', error);
+          } finally {
+            authSubmitBtn.disabled = false;
+            authSubmitBtn.textContent = isSignupMode ? 'Sign Up' : 'Log In';
+          }
+        });
+        
+        // Handle logout
+        if (logoutBtn) {
+          logoutBtn.addEventListener('click', async function(e) {
+            e.preventDefault();
+            
+            const { error } = await supabase.auth.signOut();
+            
+            if (error) {
+              console.error('Logout error:', error);
+              alert('Error logging out. Please try again.');
+              return;
+            }
+            
+            window.supabaseSession = null;
+            
+            // Show login, hide main app
+            loginScreen.style.display = 'flex';
+            mainApp.style.display = 'none';
+            
+            // Reset form
+            loginForm.reset();
+            
+            console.log('User logged out');
+          });
+        }
+        
+        // Listen for auth state changes
+        supabase.auth.onAuthStateChange((event, session) => {
+          console.log('Auth state changed:', event);
+          window.supabaseSession = session;
+          
+          if (event === 'SIGNED_IN') {
+            loginScreen.style.display = 'none';
+            mainApp.style.display = 'block';
+          } else if (event === 'SIGNED_OUT') {
+            loginScreen.style.display = 'flex';
+            mainApp.style.display = 'none';
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
