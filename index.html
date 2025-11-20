@@ -878,15 +878,23 @@
           logoutBtn.addEventListener('click', async function(e) {
             e.preventDefault();
             
+            // Attempt to sign out from Supabase
             const { error } = await supabase.auth.signOut();
             
             if (error) {
-              console.error('Logout error:', error);
-              alert('Error logging out. Please try again.');
-              return;
+              console.warn('Logout error (continuing anyway):', error);
             }
             
+            // Always clear local state regardless of server response
             window.supabaseSession = null;
+            
+            // Manually clear any Supabase tokens from localStorage to be safe
+            // Format is usually: sb-<project-ref>-auth-token
+            Object.keys(localStorage).forEach(key => {
+              if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                localStorage.removeItem(key);
+              }
+            });
             
             // Show login, hide main app
             loginScreen.style.display = 'flex';
