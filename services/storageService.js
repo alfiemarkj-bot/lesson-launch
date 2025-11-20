@@ -63,11 +63,15 @@ function createAuthenticatedClient(token) {
 
 /**
  * Create an unauthenticated Supabase client (for health checks)
+ * Prefers Service Role Key if available to ensure visibility of private buckets
  */
 function createUnauthenticatedClient() {
+  // Prefer service role key for health checks to avoid RLS issues with listing buckets
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  
   return createClient(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY
+    key
   );
 }
 
