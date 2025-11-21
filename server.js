@@ -29,10 +29,9 @@ function validateEnv() {
   const missing = required.filter(key => !process.env[key]);
   
   if (missing.length > 0) {
-    console.error('\n❌ Missing required environment variables:');
-    missing.forEach(key => console.error(`   - ${key}`));
-    console.error('\nPlease check your .env file and SUPABASE_SETUP.md\n');
-    process.exit(1);
+    console.warn('\n⚠️  WARNING: Missing required environment variables:');
+    missing.forEach(key => console.warn(`   - ${key}`));
+    console.warn('   The app will start, but some features may not work.\n');
   }
 }
 
