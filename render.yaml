@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: lesson-launch
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 20.10.0
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_QUOTA_GB
+        value: 1
+      - key: STORAGE_CLEANUP_DAYS_OLD
+        value: 90
+      - key: ENABLE_STORAGE_CLEANUP
+        value: true
+

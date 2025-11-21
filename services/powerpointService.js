@@ -3,7 +3,79 @@ const path = require('path');
 const fs = require('fs').promises;
 const { getThemeForSubject, VISUAL_ICONS } = require('../data/subject-themes');
 
-console.log('✨ ENHANCED PowerPoint Service Loaded - COMIC SANS EDITION');
+console.log('✨ ENHANCED PowerPoint Service Loaded - TEMPLATE EDITION');
+
+/**
+ * Define Master Slides (Templates) for the Presentation
+ * This creates the "XML Template" structure within the PPTX file
+ */
+function defineMasterSlides(pptx, theme) {
+  const { colors } = theme;
+
+  // Slide Types to create Masters for
+  const slideTypes = [
+    { type: 'starter', color: colors.secondary, label: 'STARTER' },
+    { type: 'main', color: colors.primary, label: 'MAIN ACTIVITY' },
+    { type: 'activity', color: colors.accent, label: 'ACTIVITY' },
+    { type: 'assessment', color: colors.warning, label: 'ASSESSMENT' },
+    { type: 'plenary', color: colors.purple, label: 'PLENARY' },
+    { type: 'standard', color: colors.primary, label: 'LESSON' } // Fallback
+  ];
+
+  slideTypes.forEach(typeConfig => {
+    pptx.defineSlideMaster({
+      title: `MASTER_${typeConfig.type.toUpperCase()}`,
+      background: { color: colors.background },
+      objects: [
+        // 1. Header Bar (Background)
+        {
+          rect: {
+            x: 0, y: 0, w: '100%', h: 0.8,
+            fill: { color: typeConfig.color },
+            line: { color: 'transparent' }
+          }
+        },
+        // 2. Header Underline
+        {
+          rect: {
+            x: 0.5, y: 1.6, w: 2, h: 0.05,
+            fill: { color: typeConfig.color },
+            line: { color: 'transparent' }
+          }
+        },
+        // 3. Footer Bar (Background for notes)
+        {
+          rect: {
+            x: 0, y: 6.8, w: '100%', h: 0.7,
+            fill: { color: colors.gray, transparency: 80 } // Subtle footer
+          }
+        },
+        // 4. Slide Number
+        {
+          placeholder: {
+            options: { name: 'slideNumber', type: 'slideNumber', x: 9.2, y: 6.9, w: 0.5, h: 0.5, fontSize: 12, color: colors.subtext }
+          },
+          text: {
+             text: function(slide) { return slide.slideNumber; }, // Dynamic slide number logic if needed, usually handled by PPTX
+          }
+        },
+        // 5. Branding / Logo (Optional placeholder)
+        // { text: { text: "LessonLaunch", x: 9.0, y: 0.1, fontSize: 10, color: colors.white, align: 'right' } }
+      ]
+    });
+  });
+
+  // Title Slide Master
+  pptx.defineSlideMaster({
+    title: 'MASTER_TITLE',
+    background: { color: colors.primary },
+    objects: [
+       // Decorative shapes for title slide
+       { rect: { x: 0, y: 0, w: '100%', h: '100%', fill: { color: colors.primary } } },
+       { rect: { x: 0.5, y: 0.5, w: 9, h: 6.5, line: { color: colors.white, width: 3 }, fill: { color: 'transparent' } } } // White border
+    ]
+  });
+}
 
 /**
  * Layout Definitions
@@ -14,11 +86,18 @@ const Layouts = {
    */
   standard: (pptx, slide, theme, options) => {
     const { colors } = theme;
-    const slideObj = pptx.addSlide();
-    slideObj.background = { color: colors.background };
+    
+    // Determine Master Name based on slide type
+    const type = slide.type || 'standard';
+    const masterName = `MASTER_${type.toUpperCase()}`;
+    
+    // Fallback if master doesn't exist (shouldn't happen with correct mapping)
+    const safeMaster = ['starter', 'main', 'activity', 'assessment', 'plenary'].includes(type) ? masterName : 'MASTER_STANDARD';
 
-    // Header
-    renderHeader(slideObj, slide, theme, options.index);
+    const slideObj = pptx.addSlide({ masterName: safeMaster });
+
+    // Header Text (Dynamic)
+    renderHeaderDynamicText(slideObj, slide, theme, options.index);
 
     // Content
     if (slide.content) {
@@ -28,8 +107,8 @@ const Layouts = {
       }, theme);
     }
 
-    // Notes box (if space permits)
-    renderFooterBox(slideObj, slide, theme);
+    // Notes Text (Dynamic)
+    renderFooterNotes(slideObj, slide, theme);
     
     return slideObj;
   },
@@ -39,11 +118,15 @@ const Layouts = {
    */
   imageRight: (pptx, slide, theme, options) => {
     const { colors } = theme;
-    const slideObj = pptx.addSlide();
-    slideObj.background = { color: colors.background };
+    
+    const type = slide.type || 'standard';
+    const masterName = `MASTER_${type.toUpperCase()}`;
+    const safeMaster = ['starter', 'main', 'activity', 'assessment', 'plenary'].includes(type) ? masterName : 'MASTER_STANDARD';
 
-    // Header
-    renderHeader(slideObj, slide, theme, options.index);
+    const slideObj = pptx.addSlide({ masterName: safeMaster });
+
+    // Header Text (Dynamic)
+    renderHeaderDynamicText(slideObj, slide, theme, options.index);
 
     // Content (Left Column)
     if (slide.content) {
@@ -119,24 +202,18 @@ const Layouts = {
       }
     }
 
-    renderFooterBox(slideObj, slide, theme);
+    renderFooterNotes(slideObj, slide, theme);
     return slideObj;
   }
 };
 
 /**
- * Helper: Render Header with Icon and Progress Dots
+ * Helper: Render Header Texts (Icon, Title, Type Label)
+ * Background shapes are now in the Master Slide!
  */
-function renderHeader(slideObj, slide, theme, index) {
+function renderHeaderDynamicText(slideObj, slide, theme, index) {
   const { colors } = theme;
   const typeConfig = getTypeConfig(slide.type, colors);
-
-  // Background bar
-  slideObj.addShape('rect', {
-    x: 0, y: 0, w: '100%', h: 0.8,
-    fill: { color: typeConfig.color },
-    line: { color: 'transparent' }
-  });
 
   // Icon
   const slideIcon = getSlideIcon(slide.type);
@@ -155,13 +232,6 @@ function renderHeader(slideObj, slide, theme, index) {
   slideObj.addText(slide.title || `Slide ${index + 1}`, {
     x: 0.5, y: 1.0, w: 9, h: 0.6,
     fontSize: 40, fontFace: 'Comic Sans MS', bold: true, color: colors.text, valign: 'top'
-  });
-
-  // Underline
-  slideObj.addShape('rect', {
-    x: 0.5, y: 1.6, w: 2, h: 0.05,
-    fill: { color: typeConfig.color },
-    line: { color: 'transparent' }
   });
 }
 
@@ -199,15 +269,12 @@ function renderContentText(slideObj, content, layout, theme) {
 }
 
 /**
- * Helper: Render Footer Box (Notes/Prompts)
+ * Helper: Render Footer Notes (Text only, background in Master)
  */
-function renderFooterBox(slideObj, slide, theme) {
+function renderFooterNotes(slideObj, slide, theme) {
   const { colors } = theme;
   if (slide.notes) {
-    slideObj.addShape('rect', {
-      x: 0, y: 6.8, w: '100%', h: 0.7,
-      fill: { color: colors.gray, transparency: 80 }
-    });
+    // Background is already in Master Slide (rect at y: 6.8)
     slideObj.addText(`Teacher Note: ${slide.notes}`, {
       x: 0.2, y: 6.8, w: 9.6, h: 0.7,
       fontSize: 14, fontFace: 'Comic Sans MS', color: colors.subtext, italic: true, valign: 'middle'
@@ -259,6 +326,9 @@ async function generatePowerPoint(slideData, outputPath, imageMap = null) {
   pptx.title = slideData.title;
   pptx.layout = 'LAYOUT_WIDE';
 
+  // 0. Define Templates (Master Slides)
+  defineMasterSlides(pptx, theme);
+
   // 1. Title Slide
   renderTitleSlide(pptx, slideData, theme);
 
@@ -271,15 +341,9 @@ async function generatePowerPoint(slideData, outputPath, imageMap = null) {
       // Determine Images
       let slideImages = [];
       if (imageMap) {
-        // 1. Check selectedImages first (from editor)
         if (slide.selectedImages && Array.isArray(slide.selectedImages) && slide.selectedImages.length > 0) {
-           // Add selected images (can be URLs or local paths)
-           slide.selectedImages.forEach(img => {
-             if (img) slideImages.push(img);
-           });
+           slide.selectedImages.forEach(img => { if (img) slideImages.push(img); });
         }
-        
-        // 2. Fallback to suggestions if no user selection and no images added yet
         if (slideImages.length === 0 && slide.imageSuggestions) {
           slide.imageSuggestions.forEach(desc => {
             if (imageMap.has(desc)) {
@@ -288,10 +352,7 @@ async function generatePowerPoint(slideData, outputPath, imageMap = null) {
           });
         }
       } else if (slide.selectedImages && Array.isArray(slide.selectedImages) && slide.selectedImages.length > 0) {
-        // Even if imageMap is null, we might have direct URLs in selectedImages
-        slide.selectedImages.forEach(img => {
-           if (img) slideImages.push(img);
-        });
+        slide.selectedImages.forEach(img => { if (img) slideImages.push(img); });
       }
 
       // Choose Layout
@@ -321,10 +382,11 @@ async function generatePowerPoint(slideData, outputPath, imageMap = null) {
  * Render Helper: Title Slide
  */
 function renderTitleSlide(pptx, data, theme) {
-  const slide = pptx.addSlide();
+  // Use the Title Master
+  const slide = pptx.addSlide({ masterName: 'MASTER_TITLE' });
   const { colors } = theme;
   
-  slide.background = { color: colors.primary };
+  // Background is handled by Master
   
   slide.addText(data.title, {
     x: 0.5, y: 2, w: 9, h: 1.5,
@@ -345,8 +407,12 @@ function renderTitleSlide(pptx, data, theme) {
 function renderObjectivesSlide(pptx, data, theme) {
   if (!data.objectives || data.objectives.length === 0) return;
   
-  const slide = pptx.addSlide();
+  // Use Standard Master (or generic)
+  const slide = pptx.addSlide({ masterName: 'MASTER_STANDARD' });
   const { colors } = theme;
+
+  // Manually add title for non-standard slides, or use renderHeader if we wanted consistency
+  // But Objectives slide usually looks different. We'll stick to custom drawing but use Master background
   
   slide.addText('Learning Objectives', {
     x: 0.5, y: 0.5, w: 9, h: 0.8,
@@ -372,7 +438,7 @@ function renderObjectivesSlide(pptx, data, theme) {
  * Render Helper: Differentiation
  */
 function renderDifferentiationSlide(pptx, data, theme) {
-  const slide = pptx.addSlide();
+  const slide = pptx.addSlide({ masterName: 'MASTER_STANDARD' });
   const { colors } = theme;
   
   slide.addText('Differentiation', {
@@ -401,7 +467,7 @@ function renderDifferentiationSlide(pptx, data, theme) {
 function renderResourcesSlide(pptx, data, theme) {
   if (!data.resources || data.resources.length === 0) return;
   
-  const slide = pptx.addSlide();
+  const slide = pptx.addSlide({ masterName: 'MASTER_STANDARD' });
   const { colors } = theme;
   
   slide.addText('Resources Needed', {
