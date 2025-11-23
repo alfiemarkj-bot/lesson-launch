@@ -35,14 +35,14 @@ function defineMasterSlides(pptx, theme) {
             line: { color: 'transparent' }
           }
         },
-        // 2. Header Underline
-        {
-          rect: {
-            x: 0.5, y: 1.6, w: 2, h: 0.05,
-            fill: { color: typeConfig.color },
-            line: { color: 'transparent' }
-          }
-        },
+        // 2. Header Underline (Removed static line, will be dynamic or simpler)
+        // {
+        //   rect: {
+        //     x: 0.5, y: 1.6, w: 2, h: 0.05,
+        //     fill: { color: typeConfig.color },
+        //     line: { color: 'transparent' }
+        //   }
+        // },
         // 3. Footer Bar (Background for notes)
         {
           rect: {
@@ -103,7 +103,7 @@ const Layouts = {
     if (slide.content) {
       // Increased Y position from 1.8 to 2.0 to clear header
       renderContentText(slideObj, slide.content, {
-        x: 0.7, y: 2.0, w: 8.6, h: 4.5,
+        x: 0.7, y: 2.2, w: 8.6, h: 4.0, // Adjusted Y to 2.2 to clear underline
         fontSize: 28, color: colors.text, fontFace: 'Comic Sans MS'
       }, theme);
     }
@@ -133,14 +133,14 @@ const Layouts = {
     if (slide.content) {
       // Increased Y from 1.8 to 2.0 to clear header
       renderContentText(slideObj, slide.content, {
-        x: 0.5, y: 2.0, w: 4.5, h: 4.5,
+        x: 0.5, y: 2.2, w: 4.5, h: 4.0, // Adjusted Y to 2.2
         fontSize: 24, color: colors.text, fontFace: 'Comic Sans MS'
       }, theme);
     }
 
     // Images (Right Column)
     if (options.images && options.images.length > 0) {
-      const imgY = 2.0; // Matched Y with content
+      const imgY = 2.2; // Matched Y with content
       const imgH = 4.0;
       const imgW = 4.5;
       const imgX = 5.2;
@@ -231,10 +231,17 @@ function renderHeaderDynamicText(slideObj, slide, theme, index) {
   });
 
   // Title
-  // Adjusted Y from 1.0 to 1.1 to clear top bar, decreased height slightly
+  // Adjusted Y from 1.1 to 1.2 to definitely clear top bar
   slideObj.addText(slide.title || `Slide ${index + 1}`, {
-    x: 0.5, y: 1.1, w: 9, h: 0.8,
+    x: 0.5, y: 1.2, w: 9, h: 0.8,
     fontSize: 40, fontFace: 'Comic Sans MS', bold: true, color: colors.text, valign: 'top'
+  });
+
+  // Dynamic Underline relative to title
+  slideObj.addShape('rect', {
+    x: 0.5, y: 2.1, w: 2, h: 0.05,
+    fill: { color: typeConfig.color },
+    line: { color: 'transparent' }
   });
 }
 
@@ -245,7 +252,6 @@ function renderContentText(slideObj, content, layout, theme) {
   const { colors } = theme;
   
   // Force bullet points for better readability
-  // Split by newlines, but also try to split by sentences if it's a big block
   let lines = content.split('\n').filter(l => l.trim());
   
   // If only one long line, try to split by full stops to make bullets
@@ -253,36 +259,35 @@ function renderContentText(slideObj, content, layout, theme) {
      lines = lines[0].split('. ').map(l => l.trim()).filter(l => l);
   }
 
-  // Check if it's already a list
-  const isList = lines.some(l => l.trim().startsWith('-') || l.trim().startsWith('•'));
+  // Prepare text objects for PPTXGenJS automatic layout
+  const textObjects = lines.map(l => {
+    const cleanText = l.replace(/^[-•]\s*/, '').trim();
+    if (!cleanText) return null;
+    
+    return {
+      text: cleanText,
+      options: { 
+        fontSize: layout.fontSize, 
+        color: layout.color, 
+        fontFace: layout.fontFace || 'Comic Sans MS',
+        bullet: { type: 'number', color: colors.primary }, // Use auto bullets
+        breakLine: true // Ensure new line
+      }
+    };
+  }).filter(Boolean);
 
-  // If it's not a list, we treat every line as a bullet point
-  const bullets = lines.map(l => l.replace(/^[-•]\s*/, '').trim()).filter(l => l);
-  
-  let y = layout.y;
-  bullets.forEach(bullet => {
-    // Draw custom bullet point
-    slideObj.addShape('ellipse', {
-      x: layout.x, y: y + 0.15, w: 0.1, h: 0.1,
-      fill: { color: colors.primary }
-    });
-    
-    // Add text
-    slideObj.addText(bullet, {
-      x: layout.x + 0.25, y: y, w: layout.w - 0.25, h: 0.5, // Fixed height per bullet
-      fontSize: layout.fontSize, 
-      color: layout.color, 
-      fontFace: layout.fontFace || 'Comic Sans MS', 
+  if (textObjects.length > 0) {
+    // Use a single text box for automatic flow handling
+    slideObj.addText(textObjects, {
+      x: layout.x, 
+      y: layout.y + 0.5, // Add padding below underline
+      w: layout.w, 
+      h: layout.h,
       valign: 'top',
-      autoFit: true, // Ensure text fits
-      wrap: true
+      lineSpacing: 28, // Better spacing
+      autoFit: true
     });
-    
-    // Calculate next Y position based on text length (rough approximation)
-    const lineCount = Math.ceil((bullet.length * 12) / (layout.w * 100)); // approx chars per line
-    const heightIncrement = Math.max(0.6, lineCount * 0.5);
-    y += heightIncrement;
-  });
+  }
 }
 
 /**
