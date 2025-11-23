@@ -101,8 +101,9 @@ const Layouts = {
 
     // Content
     if (slide.content) {
+      // Increased Y position from 1.8 to 2.0 to clear header
       renderContentText(slideObj, slide.content, {
-        x: 0.7, y: 1.8, w: 8.6, h: 4.5,
+        x: 0.7, y: 2.0, w: 8.6, h: 4.5,
         fontSize: 28, color: colors.text, fontFace: 'Comic Sans MS'
       }, theme);
     }
@@ -130,15 +131,16 @@ const Layouts = {
 
     // Content (Left Column)
     if (slide.content) {
+      // Increased Y from 1.8 to 2.0 to clear header
       renderContentText(slideObj, slide.content, {
-        x: 0.5, y: 1.8, w: 4.5, h: 4.5,
+        x: 0.5, y: 2.0, w: 4.5, h: 4.5,
         fontSize: 24, color: colors.text, fontFace: 'Comic Sans MS'
       }, theme);
     }
 
     // Images (Right Column)
     if (options.images && options.images.length > 0) {
-      const imgY = 1.8;
+      const imgY = 2.0; // Matched Y with content
       const imgH = 4.0;
       const imgW = 4.5;
       const imgX = 5.2;
@@ -229,8 +231,9 @@ function renderHeaderDynamicText(slideObj, slide, theme, index) {
   });
 
   // Title
+  // Adjusted Y from 1.0 to 1.1 to clear top bar, decreased height slightly
   slideObj.addText(slide.title || `Slide ${index + 1}`, {
-    x: 0.5, y: 1.0, w: 9, h: 0.6,
+    x: 0.5, y: 1.1, w: 9, h: 0.8,
     fontSize: 40, fontFace: 'Comic Sans MS', bold: true, color: colors.text, valign: 'top'
   });
 }
@@ -240,32 +243,46 @@ function renderHeaderDynamicText(slideObj, slide, theme, index) {
  */
 function renderContentText(slideObj, content, layout, theme) {
   const { colors } = theme;
-  const lines = content.split('\n').filter(l => l.trim());
+  
+  // Force bullet points for better readability
+  // Split by newlines, but also try to split by sentences if it's a big block
+  let lines = content.split('\n').filter(l => l.trim());
+  
+  // If only one long line, try to split by full stops to make bullets
+  if (lines.length === 1 && lines[0].length > 100) {
+     lines = lines[0].split('. ').map(l => l.trim()).filter(l => l);
+  }
+
+  // Check if it's already a list
   const isList = lines.some(l => l.trim().startsWith('-') || l.trim().startsWith('•'));
 
-  if (isList) {
-    // Bullet list
-    const bullets = lines.map(l => l.replace(/^[-•]\s*/, '').trim()).filter(l => l);
-    let y = layout.y;
-    bullets.forEach(bullet => {
-      slideObj.addShape('ellipse', {
-        x: layout.x, y: y + 0.15, w: 0.1, h: 0.1,
-        fill: { color: colors.primary }
-      });
-      slideObj.addText(bullet, {
-        x: layout.x + 0.25, y: y, w: layout.w - 0.25, h: 0.5,
-        fontSize: layout.fontSize, color: layout.color, fontFace: layout.fontFace || 'Comic Sans MS', valign: 'top'
-      });
-      y += 0.6;
+  // If it's not a list, we treat every line as a bullet point
+  const bullets = lines.map(l => l.replace(/^[-•]\s*/, '').trim()).filter(l => l);
+  
+  let y = layout.y;
+  bullets.forEach(bullet => {
+    // Draw custom bullet point
+    slideObj.addShape('ellipse', {
+      x: layout.x, y: y + 0.15, w: 0.1, h: 0.1,
+      fill: { color: colors.primary }
     });
-  } else {
-    // Paragraphs
-    slideObj.addText(content, {
-      x: layout.x, y: layout.y, w: layout.w, h: layout.h,
-      fontSize: layout.fontSize, color: layout.color, fontFace: layout.fontFace || 'Comic Sans MS', valign: 'top',
-      lineSpacing: 24
+    
+    // Add text
+    slideObj.addText(bullet, {
+      x: layout.x + 0.25, y: y, w: layout.w - 0.25, h: 0.5, // Fixed height per bullet
+      fontSize: layout.fontSize, 
+      color: layout.color, 
+      fontFace: layout.fontFace || 'Comic Sans MS', 
+      valign: 'top',
+      autoFit: true, // Ensure text fits
+      wrap: true
     });
-  }
+    
+    // Calculate next Y position based on text length (rough approximation)
+    const lineCount = Math.ceil((bullet.length * 12) / (layout.w * 100)); // approx chars per line
+    const heightIncrement = Math.max(0.6, lineCount * 0.5);
+    y += heightIncrement;
+  });
 }
 
 /**
